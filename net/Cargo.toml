@@ -30,9 +30,12 @@ failure = "0.1.2"
 futures = "0.1"
 http = "0.1.5"
 hyper = "0.12"
+# hyper-socks-async = "0.1" can't be used in systems using openssl 1.1,
+# because it depends on rust openssl < 0.10, so use hyper-socks2.
+hyper-socks2 = "0.2"
 hyper-tls = "0.3"
 libc = "0.2.33"
-native-tls = "0.2.0"
+native-tls = "0.2"
 nettle = "5.0"
 percent-encoding = "2.1"
 tempfile = "3.1"

@@ -25,6 +25,7 @@ use std::path::{Path, PathBuf};
 use failure::ResultExt;
 use futures::{future, Future, Stream};
 use hyper::{Uri, Client};
+use hyper_socks2::Proxy;
 use hyper_tls::HttpsConnector;
 // Hash implements the traits for Sha1
 // Sha1 is used to obtain a 20 bytes digest that after zbase32 encoding can
@@ -252,6 +253,67 @@ fn parse_body<S: AsRef<str>>(body: &[u8], email_address: S)
 }
 
 
+/// Returns an HTTPS [`Client`] using a SOCKS [`Proxy`] if available. 
+///
+/// The SOCKS proxy socket is `127.0.0.1:9050`, which is the default for 
+/// a system Tor process.
+/// If `no_socks` is true, returns and HTTPS client without SOCKS proxy.
+/// If the proxy fails and the `socks_only` is false, returs and HTTPS client
+/// without SOCKS proxy.
+///
+/// [`Client`]: https://docs.rs/hyper/0.12.35/hyper/client/index.html#client
+/// [`Proxy`]: https://docs.rs/hyper-socks2/0.2.1/hyper_socks2/enum.Proxy.html
+// XXX: Probably it would be better to print an error message if the proxy
+// fails rather than requesting without the proxy.
+// XXX: Create argument for the SOCKS socket and authentication?
+fn create_client<'a>(socks_only: bool, no_socks: bool)
+    -> std::result::Result<Box<Get>, hyper_tls::Error>
+{
+    if no_socks {
+        return Ok(Box::new(Client::builder()
+                    .build::<_, hyper::Body>(HttpsConnector::new(4)?)))
+    }
+    let proxy = Proxy::Socks5 {
+        addrs: "127.0.0.1:9050".to_string(),
+        auth: None,
+    };
+
+    match proxy.with_tls() {
+        Ok(proxy_https_connector) => Ok(Box::new(
+            Client::builder().build::<_, hyper::Body>(proxy_https_connector)
+        )),
+        Err(e) =>
+            if socks_only {
+                Err(e.into())
+            } else { 
+                Ok(Box::new(Client::builder()
+                    .build::<_, hyper::Body>(HttpsConnector::new(4)?)))
+        }
+    }
+}
+
+
+/// Trait to use different `hyper_tls::HttpsConnector` types
+trait Get {
+    fn get(&self, uri: Uri) -> hyper::client::ResponseFuture;
+}
+
+
+impl Get for 
+hyper::Client<hyper_tls::HttpsConnector<hyper_socks2::Proxy<String>>> {
+    fn get(&self, uri: Uri) -> hyper::client::ResponseFuture {
+        self.get(uri)
+    }
+}
+
+impl Get for 
+hyper::Client<hyper_tls::HttpsConnector<hyper::client::HttpConnector>> {
+    fn get(&self, uri: Uri) -> hyper::client::ResponseFuture {
+        self.get(uri)
+    }
+}
+
+
 /// Retrieves the TPKs that contain userids with a given email address
 /// from a Web Key Directory URL.
 ///
@@ -290,21 +352,27 @@ fn parse_body<S: AsRef<str>>(body: &[u8], email_address: S)
 ///
 /// let email_address = "foo@bar.baz";
 /// let mut core = Core::new().unwrap();
-/// let tpks = core.run(wkd::get(&email_address)).unwrap();
+/// let tpks = core.run(wkd::get(&email_address, None, None)).unwrap();
 /// ```
 
 // XXX: Maybe the direct method should be tried on other errors too.
 // https://mailarchive.ietf.org/arch/msg/openpgp/6TxZc2dQFLKXtS0Hzmrk963EteE
-pub fn get<S: AsRef<str>>(email_address: S)
-                          -> impl Future<Item=Vec<TPK>, Error=failure::Error> {
+pub fn get<S, T, U>(email_address: S, socks_only: T, no_socks: U)
+    -> impl Future<Item=Vec<TPK>, Error=failure::Error>
+    where S: AsRef<str>,
+          T: Into<Option<bool>>,
+          U: Into<Option<bool>>
+{
+    let socks_only = socks_only.into().unwrap_or_default();
+    let no_socks = no_socks.into().unwrap_or_default();
+
     let email = email_address.as_ref().to_string();
     future::lazy(move || -> Result<_> {
         // First, prepare URIs and client.
         let wkd_url = Url::from(&email)?;
 
-        // WKD must use TLS, so build a client for that.
-        let https = HttpsConnector::new(4)?;
-        let client = Client::builder().build::<_, hyper::Body>(https);
+        // Create an HTTPS client.
+        let client = create_client(socks_only, no_socks)?;
 
         use self::Variant::*;
         Ok((email, client, wkd_url.to_uri(Advanced)?, wkd_url.to_uri(Direct)?))

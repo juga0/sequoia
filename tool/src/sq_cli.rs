@@ -500,7 +500,19 @@ pub fn build() -> App<'static, 'static> {
                                 .arg(Arg::with_name("binary")
                                     .long("binary")
                                     .short("B")
-                                    .help("Don't ASCII-armor encode the OpenPGP data")))
+                                    .help("Don't ASCII-armor encode the OpenPGP data"))
+                                .arg(Arg::with_name("tor_only")
+                                    .long("tor_only")
+                                    .short("T")
+                                    .help("Don't obtain the key if a \
+                                           connection to the WKD URI via Tor \
+                                           (listening on 127.0.0.1:9050) \
+                                           fails."))
+                                .arg(Arg::with_name("no_tor")
+                                    .long("no_tor")
+                                    .short("C")
+                                    .help("Obtain the key in clear, without \
+                                           using Tor.")))
                     .subcommand(SubCommand::with_name("generate")
                                 .about("Generates a Web Key Directory \
                                         for the given domain and keys.  \

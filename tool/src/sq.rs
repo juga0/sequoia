@@ -527,13 +527,16 @@ fn real_main() -> Result<(), failure::Error> {
                     println!("{}", url);
                 },
                 ("get",  Some(m)) => {
+                    // XXX: Add argument to do not require Tor.
                     let email_address = m.value_of("input").unwrap();
                     // XXX: EmailAddress could be created here to
                     // check it's a valid email address, print the error to
                     // stderr and exit.
                     // Because it might be created a WkdServer struct, not
                     // doing it for now.
-                    let tpks = core.run(wkd::get(&email_address))?;
+                    let tpks = core.run(wkd::get(&email_address,
+                                                 m.is_present("tor_only"),
+                                                 m.is_present("no_tor")))?;
                     // ```text
                     //     The HTTP GET method MUST return the binary representation of the
                     //     OpenPGP key for the given mail address.
