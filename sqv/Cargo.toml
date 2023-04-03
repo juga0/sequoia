@@ -23,7 +23,7 @@ maintenance = { status = "actively-developed" }
 sequoia-openpgp = { path = "../openpgp", version = "0.7", default-features = false }
 clap = "2.32.0"
 failure = "0.1.2"
-time = "0.1.38"
+time = "0.2.0"
 
 [build-dependencies]
 clap = "2.27.1"
